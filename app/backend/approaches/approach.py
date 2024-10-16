@@ -91,6 +91,30 @@ class ThoughtStep:
 
 
 class Approach(ABC):
+    """
+    Abstract base class `Approach` for implementing various search and embedding strategies.
+    Attributes:
+        ALLOW_NON_GPT_MODELS (bool): Flag to allow usage of non-GPT models even if no tokenizer is available for accurate token counting.
+    Methods:
+        __init__(search_client, openai_client, auth_helper, query_language, query_speller, embedding_deployment, embedding_model, embedding_dimensions, openai_host, vision_endpoint, vision_token_provider):
+            Initializes the `Approach` class with the provided clients, configurations, and parameters.
+        build_filter(overrides, auth_claims) -> Optional[str]:
+            Constructs a filter string based on provided overrides and authentication claims.
+        search(top, query_text, filter, vectors, use_text_search, use_vector_search, use_semantic_ranker, use_semantic_captions, minimum_search_score, minimum_reranker_score) -> List[Document]:
+            Executes a search query using the provided parameters and returns a list of qualified documents.
+        get_sources_content(results, use_semantic_captions, use_image_citation) -> list[str]:
+            Retrieves the content of the sources from the search results, optionally using semantic captions and image citations.
+        get_citation(sourcepage, use_image_citation) -> str:
+            Generates a citation string for the given source page, optionally using image citation.
+        compute_text_embedding(q: str):
+            Computes the text embedding for the given query string using the configured embedding model.
+        compute_image_embedding(q: str):
+            Computes the image embedding for the given query string using the vision endpoint.
+        run(messages, session_state=None, context={}) -> dict[str, Any]:
+            Abstract method to be implemented by subclasses for running the approach with the provided messages and context.
+        run_stream(messages, session_state=None, context={}) -> AsyncGenerator[dict[str, Any], None]:
+            Abstract method to be implemented by subclasses for running the approach in a streaming manner with the provided messages and context.
+    """
 
     # Allows usage of non-GPT model even if no tokenizer is available for accurate token counting
     # Useful for using local small language models, for example
