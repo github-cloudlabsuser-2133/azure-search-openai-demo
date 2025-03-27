@@ -30,6 +30,10 @@ from core.authentication import AuthenticationHelper
 
 @dataclass
 class Document:
+    """
+    Represents a document retrieved from the search index.
+    Contains metadata, embeddings, and other relevant information.
+    """
     id: Optional[str]
     content: Optional[str]
     embedding: Optional[List[float]]
@@ -44,6 +48,10 @@ class Document:
     reranker_score: Optional[float] = None
 
     def serialize_for_results(self) -> dict[str, Any]:
+        """
+        Serializes the document into a dictionary format for returning results.
+        Includes trimmed embeddings and formatted captions.
+        """
         return {
             "id": self.id,
             "content": self.content,
@@ -72,25 +80,32 @@ class Document:
 
     @classmethod
     def trim_embedding(cls, embedding: Optional[List[float]]) -> Optional[str]:
-        """Returns a trimmed list of floats from the vector embedding."""
+        """
+        Trims the embedding list to show only the first two items and the count of remaining items.
+        Returns None if the embedding is not provided.
+        """
         if embedding:
             if len(embedding) > 2:
-                # Format the embedding list to show the first 2 items followed by the count of the remaining items."""
                 return f"[{embedding[0]}, {embedding[1]} ...+{len(embedding) - 2} more]"
             else:
                 return str(embedding)
-
         return None
 
 
 @dataclass
 class ThoughtStep:
+    """
+    Represents a step in a thought process, including a title, description, and optional properties.
+    """
     title: str
     description: Optional[Any]
     props: Optional[dict[str, Any]] = None
 
 
 class Approach(ABC):
+    """
+    Abstract base class for implementing different approaches to handle search and retrieval tasks.
+    """
 
     def __init__(
         self,
@@ -99,7 +114,7 @@ class Approach(ABC):
         auth_helper: AuthenticationHelper,
         query_language: Optional[str],
         query_speller: Optional[str],
-        embedding_deployment: Optional[str],  # Not needed for non-Azure OpenAI or for retrieval_mode="text"
+        embedding_deployment: Optional[str],
         embedding_model: str,
         embedding_dimensions: int,
         openai_host: str,
@@ -107,6 +122,9 @@ class Approach(ABC):
         vision_token_provider: Callable[[], Awaitable[str]],
         prompt_manager: PromptManager,
     ):
+        """
+        Initializes the Approach with required clients, configurations, and dependencies.
+        """
         self.search_client = search_client
         self.openai_client = openai_client
         self.auth_helper = auth_helper
@@ -121,6 +139,10 @@ class Approach(ABC):
         self.prompt_manager = prompt_manager
 
     def build_filter(self, overrides: dict[str, Any], auth_claims: dict[str, Any]) -> Optional[str]:
+        """
+        Builds a filter string for the search query based on overrides and authentication claims.
+        Includes category filters and security filters.
+        """
         include_category = overrides.get("include_category")
         exclude_category = overrides.get("exclude_category")
         security_filter = self.auth_helper.build_security_filters(overrides, auth_claims)
@@ -147,6 +169,11 @@ class Approach(ABC):
         minimum_reranker_score: Optional[float] = None,
         use_query_rewriting: Optional[bool] = None,
     ) -> List[Document]:
+        """
+        Executes a search query using the Azure Search client.
+        Supports text search, vector search, semantic ranking, and query rewriting.
+        Filters and scores the results based on the provided thresholds.
+        """
         search_text = query_text if use_text_search else ""
         search_vectors = vectors if use_vector_search else []
         if use_semantic_ranker:
@@ -205,6 +232,10 @@ class Approach(ABC):
     def get_sources_content(
         self, results: List[Document], use_semantic_captions: bool, use_image_citation: bool
     ) -> list[str]:
+        """
+        Extracts and formats the content of the source documents.
+        Includes semantic captions or full content based on the configuration.
+        """
 
         def nonewlines(s: str) -> str:
             return s.replace("\n", " ").replace("\r", " ")
@@ -223,6 +254,10 @@ class Approach(ABC):
             ]
 
     def get_citation(self, sourcepage: str, use_image_citation: bool) -> str:
+        """
+        Generates a citation string for a document source page.
+        Handles image citations and PDF page references.
+        """
         if use_image_citation:
             return sourcepage
         else:
@@ -235,6 +270,10 @@ class Approach(ABC):
             return sourcepage
 
     async def compute_text_embedding(self, q: str):
+        """
+        Computes a text embedding vector using the OpenAI API.
+        Supports different embedding models and dimensions.
+        """
         SUPPORTED_DIMENSIONS_MODEL = {
             "text-embedding-ada-002": False,
             "text-embedding-3-small": True,
@@ -248,7 +287,6 @@ class Approach(ABC):
             {"dimensions": self.embedding_dimensions} if SUPPORTED_DIMENSIONS_MODEL[self.embedding_model] else {}
         )
         embedding = await self.openai_client.embeddings.create(
-            # Azure OpenAI takes the deployment name as the model name
             model=self.embedding_deployment if self.embedding_deployment else self.embedding_model,
             input=q,
             **dimensions_args,
@@ -257,6 +295,10 @@ class Approach(ABC):
         return VectorizedQuery(vector=query_vector, k_nearest_neighbors=50, fields="embedding")
 
     async def compute_image_embedding(self, q: str):
+        """
+        Computes an image embedding vector using the Azure Computer Vision API.
+        Sends a request to the vision endpoint with the provided text query.
+        """
         endpoint = urljoin(self.vision_endpoint, "computervision/retrieval:vectorizeText")
         headers = {"Content-Type": "application/json"}
         params = {"api-version": "2023-02-01-preview", "modelVersion": "latest"}
@@ -273,7 +315,10 @@ class Approach(ABC):
         return VectorizedQuery(vector=image_query_vector, k_nearest_neighbors=50, fields="imageEmbedding")
 
     def get_system_prompt_variables(self, override_prompt: Optional[str]) -> dict[str, str]:
-        # Allows client to replace the entire prompt, or to inject into the existing prompt using >>>
+        """
+        Generates a dictionary of system prompt variables based on the provided override prompt.
+        Supports injecting or replacing the existing prompt.
+        """
         if override_prompt is None:
             return {}
         elif override_prompt.startswith(">>>"):
@@ -287,6 +332,10 @@ class Approach(ABC):
         session_state: Any = None,
         context: dict[str, Any] = {},
     ) -> dict[str, Any]:
+        """
+        Abstract method to be implemented by subclasses.
+        Executes the main logic of the approach.
+        """
         raise NotImplementedError
 
     async def run_stream(
@@ -295,4 +344,8 @@ class Approach(ABC):
         session_state: Any = None,
         context: dict[str, Any] = {},
     ) -> AsyncGenerator[dict[str, Any], None]:
+        """
+        Abstract method to be implemented by subclasses.
+        Executes the main logic of the approach in a streaming fashion.
+        """
         raise NotImplementedError
